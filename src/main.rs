@@ -2,28 +2,34 @@ use std::f32::consts::{FRAC_PI_2, PI};
 
 use macroquad::prelude::*;
 
+const W: f32 = 80.0;
+
 #[macroquad::main("Lissajous Curve Table")]
 async fn main() {
     request_new_screen_size(700.0, 700.0);
 
-    let w = 80.0;
-    let cols = (screen_width() / w).floor() as i32 - 1;
+    let cols = (screen_width() / W).floor() as i32 - 1;
     let rows = cols;
-    let mut angle = 0.0;
     let mut col_circles = vec![];
     let mut row_circles = vec![];
     let mut curves = vec![];
 
     // Create the column circles
     for i in 0..cols {
+        let cx = (i as f32 + 1.5) * W;
+        let cy = W / 2.0;
+        let d = W / 2.0 - 10.0;
         let color = Color::from_rgba((i as f32 * 256.0/cols as f32) as u8, 255, 0, 255);
-        col_circles.push(Circle::new(color));
+        col_circles.push(Circle::new(cx, cy, d, color));
     }
 
     // Create the row circles
     for j in 0..rows {
+        let cy = (j as f32 + 1.5) * W;
+        let cx = W / 2.0;
+        let d = W / 2.0 - 10.0;
         let color = Color::from_rgba(255, 0, (j as f32 * 256.0/cols as f32) as u8, 255);
-        row_circles.push(Circle::new(color));
+        row_circles.push(Circle::new(cx, cy, d, color));
     }
 
     // Create cols * rows amount of curves
@@ -35,75 +41,85 @@ async fn main() {
         curves.push(row);
     }
 
+    let mut scene = Scene { rows: row_circles, cols: col_circles, curves, angle: 0.0 };
+
     loop {
         clear_background(BLACK);
-        draw(rows, cols, w ,angle, &row_circles, &col_circles, &mut curves);
+        scene.show();
         next_frame().await;
+        scene.update();
+    }
+}
 
-        angle -= PI / 400.0;
+struct Scene {
+    rows: Vec<Circle>,
+    cols: Vec<Circle>,
+    curves: Vec<Vec<Curve>>,
+    angle: f32,
+}
+
+impl Scene {
+    fn show(&mut self) {
+        for i in 0..self.cols.len() {
+            let circle = &self.cols[i];
+            draw_circle_lines(circle.x, circle.y, circle.d, 1.0, circle.color);
+            let angle = self.angle * (i + 1) as f32;
+            let x = circle.x + circle.d * (angle + FRAC_PI_2).cos();
+            let y = circle.y + circle.d * (angle + FRAC_PI_2).sin();
+            draw_circle(x, y, 3.0, WHITE);
+            draw_line(x, 0.0, x, screen_height(), 1.0, WHITE.with_alpha(0.2));
+
+            for j in 0..self.rows.len() {
+                self.curves[j][i].set_x(x, self.rows[j].color);
+            }
+        }
+
+        for j in 0..self.rows.len() {
+            let circle = &self.rows[j];
+            draw_circle_lines(circle.x, circle.y, circle.d, 1.0, circle.color);
+            let angle = self.angle * (j + 1) as f32;
+            let x = circle.x + circle.d * (angle + FRAC_PI_2).cos();
+            let y = circle.y + circle.d * (angle + FRAC_PI_2).sin();
+            draw_circle(x, y, 3.0, WHITE);
+            draw_line(0.0, y, screen_width(), y, 1.0, WHITE.with_alpha(0.2));
+
+            for i in 0..self.cols.len() {
+                self.curves[j][i].set_y(y, self.cols[i].color);
+            }
+        }
+
+        for j in 0..self.rows.len() {
+            for i in 0..self.cols.len() {
+                self.curves[j][i].add();
+                self.curves[j][i].show();
+            }
+        }
+    }
+
+    fn update(&mut self) {
+        self.angle -= PI / 400.0;
         
-        if angle < -2.0 * PI {
-            for row in curves.iter_mut() {
+        if self.angle < -2.0 * PI {
+            for row in self.curves.iter_mut() {
                 for curve in row.iter_mut() {
                     curve.reset();
                 }
             }
-            angle = 0.0;
-        }
-    }
-}
-
-fn draw(
-    rows: i32, cols: i32, w: f32, angle: f32, 
-    row_circles: &Vec<Circle>, col_circles: &Vec<Circle>, 
-    curves: &mut Vec<Vec<Curve>>) {
-    for i in 0..cols {
-        let cx = (i as f32 + 1.5) * w;
-        let cy = w / 2.0;
-        let d = w / 2.0 - 10.0;
-        draw_circle_lines(cx, cy, d, 1.0, col_circles[i as usize].color);
-        let angle = angle * (i + 1) as f32;
-        let x = cx + d * (angle + FRAC_PI_2).cos();
-        let y = cy + d * (angle + FRAC_PI_2).sin();
-        draw_circle(x, y, 3.0, WHITE);
-        draw_line(x, 0.0, x, screen_height(), 1.0, WHITE.with_alpha(0.2));
-
-        for j in 0..rows {
-            curves[j as usize][i as usize].set_x(x, row_circles[j as usize].color);
-        }
-    }
-
-    for j in 0..cols {
-        let cy = (j as f32 + 1.5) * w;
-        let cx = w / 2.0;
-        let d = w / 2.0 - 10.0;
-        draw_circle_lines(cx, cy, d, 1.0, row_circles[j as usize].color);
-        let angle = angle * (j + 1) as f32;
-        let x = cx + d * (angle + FRAC_PI_2).cos();
-        let y = cy + d * (angle + FRAC_PI_2).sin();
-        draw_circle(x, y, 3.0, WHITE);
-        draw_line(0.0, y, screen_width(), y, 1.0, WHITE.with_alpha(0.2));
-
-        for i in 0..cols {
-            curves[j as usize][i as usize].set_y(y, col_circles[i as usize].color);
-        }
-    }
-
-    for j in 0..rows {
-        for i in 0..cols {
-            curves[j as usize][i as usize].add();
-            curves[j as usize][i as usize].show();
+            self.angle = 0.0;
         }
     }
 }
 
 struct Circle {
+    x: f32,
+    y: f32,
+    d: f32,
     color: Color,
 }
 
 impl Circle {
-    fn new(color: Color) -> Circle {
-        Circle { color }
+    fn new(x: f32, y: f32, d: f32, color: Color) -> Circle {
+        Circle { x, y, d, color }
     }
 }
 
