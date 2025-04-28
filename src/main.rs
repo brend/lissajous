@@ -1,9 +1,16 @@
 use std::{cmp, f32::consts::{FRAC_PI_2, PI}};
+use std::time::{Duration, Instant};
 
 use macroquad::prelude::*;
 
 /// Size of a grid cell (circle)
 const W: f32 = 80.0;
+
+/// Target frames per second
+const TARGET_FPS: Option<f32> = None;
+/// Uncomment the line below to set a target frame rate,
+/// for example if your machine slows down towards the end of the animation
+// const TARGET_FPS: Option<f32> = Some(30.0);
 
 #[macroquad::main("Lissajous Curve Table")]
 async fn main() {
@@ -12,12 +19,31 @@ async fn main() {
     let mut sw = screen_width();
     let mut sh = screen_height();
 
+    // Compute the ideal duration of a single frame
+    let frame_time = match TARGET_FPS {
+        Some(tfps) => Some(Duration::from_secs_f32(1.0 / tfps)),
+        None => None
+    };
+
     // Drawing and updating loop
     loop {
+        let frame_start = Instant::now();
+
         clear_background(BLACK);
         scene.show();
         next_frame().await;
+
+        // Update the scene (mostly the angle)
         scene.update();
+
+        // Manually limit the frame rate
+        let elapsed = frame_start.elapsed();
+        if let Some(frame_time) = frame_time {
+            if elapsed < frame_time {
+                let sleep_duration = frame_time - elapsed;
+                std::thread::sleep(std::time::Duration::from_millis(sleep_duration.as_millis() as u64));
+            }
+        }
 
         // If the screen size has changed,
         // reset the scene to fit the new size
@@ -226,6 +252,10 @@ impl Curve {
 
     /// Draw the curve on the screen
     fn show(&self) {
+        if self.path.len() < 2 {
+            return;
+        }
+
         // draw the curve as a sequence of lines
         for i in 0..self.path.len() - 1 {
             let j = (i + 1) % self.path.len();
